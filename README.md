@@ -36,16 +36,43 @@ This renames all jpg images in the current directory which
 name starts with letter 'b' and end with two numbers, for
 just the two numbers and the extension.
 
-There's an internal variable `$c='0000'` available, which can be used
-in the `SUBSTITUTION_PATTERN`.
+There are some variables which can be used
+in the `SUBSTITUTION_PATTERN`:
+
+* `$c='0001'`, this variable is the only one available for writing in the regex
+* `$counter` number of files renamed so far
+* `$_` filename
+* `$d` directory of the file (available only if using `-r`, or `-l` with `-R` or `*`)
+* `$f` complete filename path
+
 For example:
 
-	$ rnm -l '$c++; s/^/$c./' '-rt'
-This renames all files (and folders) in current directory,
+	$ rnm 's/^/$counter./' '/./'
+This renames all files in current directory,
+prepending a consecutive number starting with '0000'.
+
+	$ rnm 's/^/($counter+1)."."/e' '/./'
+This renames all files in current directory,
+prepending a consecutive number starting with '1'.
+
+	$ rnm '$c++; s/^/$c./' '/./'
+This renames recursively all files and folders in the current directory,
+prepending a consecutive number starting with '0001'.
+
+	$ rnm -l 's/^/$counter./' '-rt *.jpg'
+This renames all files with extension ".jpg" in current directory,
 ordered by modification time, prepending a consecutive number 
 starting with '0001'.
 
-	$ rnm -l '$c=stat($_)->mtime; s/^/$c./' '*.log'
+	$ rnm -r '$c=strftime "%Y%m%d", localtime(); s/(.+)/${c}.$1/' '/./'
+This renames recursively all files and folders in the current path,
+prepending the current date to every name.
+
+	$ rnm '$c=strftime "%Y%m%d", localtime(stat($f)->mtime); s/(.+)/$c.$1/' '/\.log$/'
+This renames all files with ".log" extension in the current path,
+prepending their file modification date to every name.
+
+	$ rnm -l '$c=stat($f)->mtime; s/^/$c./' '*.log'
 This renames all filenames with extension ".log" in the current 
 directory, prepending to each one its modification unix timestamp. 
 
@@ -55,7 +82,7 @@ In order to use the script in Windows you need:
 * a Perl installation (for example [ActivePerl](https://www.activestate.com/activeperl) or [Strawberry Perl](http://strawberryperl.com/)). The script has been tested with ActivePerl.
 * copy the `rnm` script and `rnm.bat` to a folder in your execution PATH
 
-The `rmm.bat` batch script is provided as an example: you may need to add the path to your Perl executable if it is not in your PATH.
+The `rmm.bat` batch script is provided as an example: it supposes that both `perl.exe` and `rnm` are in the PATH.
 
 In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH in order to use the `ls` command.
 

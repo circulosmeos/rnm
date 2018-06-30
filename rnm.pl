@@ -11,6 +11,7 @@ use strict;
 use File::Find;
 use File::Basename;
 use POSIX qw(strftime);
+use utf8;
 use File::stat; # in order to use a regex as: rnm -l '$c=stat($_)->mtime; s/(.+)/$c/' '-rt'
 
 my $fso; # for Windows Win32::OLE Scripting.FileSystemObject
@@ -20,7 +21,7 @@ if ( $^O=~/win32/i ) {
     eval q{
         # https://www.perlmonks.org/?node_id=1170561
         # by nikosv on Sep 02, 2016 at 04:32 UTC
-        # https://www.perlmonks.org/bare/?node_id=250957
+        # https://www.perlmonks.org/?node_id=250957
         # by t'mo (Pilgrim) on Apr 18, 2003 at 05:26 UTC
         use Win32::Console;
         Win32::Console::OutputCP( 65001 );
@@ -249,7 +250,7 @@ sub rename() {
 
     print "\n";
     print '--- (files =~ search pattern: '.($#{$FILE_LIST}+1).")\n";
-    print '--- files to rename (listed): '.($counter)."\n";
+    print '--- files to rename (listed): '.($counter+0)."\n";
     print 'Do you want to rename this file list? ';
     if ($LOG==1) {
         print '(y/ Y(=>log)/ *):';
@@ -278,11 +279,11 @@ sub rename() {
     ($counter, $errors) = &process_file_list( $regexp, $FILE_LIST, $PATH_LIST, 1, $LOG, $ANSWER );
 
 
-    print "\n".($counter)." files renamed\n";
+    print "\n".($counter+0)." files renamed\n";
     print "\n".($errors)." errors\n" if ($errors>0);
     if ($ANSWER eq 'Y' && $LOG == 1) {
         print "\nFile log created: $LOG_FILE\n";
-        print fLog "\n".($counter)." files renamed\n";
+        print fLog "\n".($counter+0)." files renamed\n";
         print fLog "\n".($errors)." errors\n" if ($errors>0);
     }
 
@@ -304,7 +305,7 @@ sub process_file_list() {
     $ANSWER = shift if ($ACTION);
 
     my $temp;
-    my $counter = 0;
+    my $counter = '0000';
     my $errors = 0;
     my $ERROR;
     my $i = -1;
@@ -327,9 +328,19 @@ sub process_file_list() {
         }
         $old_name = $_;
 
+        # interesting variables available in this `eval $regexp`:
+        # $c (available for r/w in regex), $counter (# of files renamed so far), 
+        # $_ (filename), $d (directory, if $RECURSIVE == 1), $f (complete filename path)
+        my $d = $PATH_LIST[$i]                if @PATH_LIST;
+        my $f = $old_name;
+        $f = $d . $PATH_SEPARATOR . $old_name if @PATH_LIST;
         eval $regexp;
 
-        die $@ if $@;
+        #die $@ if $@;
+        # do not stop on errors, but print them
+        print "!!! $f, $@" if $@;
+        next if $@;
+
         next if ($old_name eq $_);
         $counter++ if (! $ACTION);
         if (@PATH_LIST) {
@@ -433,7 +444,8 @@ For example:
     This renames all filenames with extension ".log" in the current 
     directory, prepending to each one its modification unix timestamp. 
 
-Written by circulosmeos (//github.com/circulosmeos)
+Written by circulosmeos (//github.com/circulosmeos) 
+GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
 2018-06
 
 MAN_PAGE_END
