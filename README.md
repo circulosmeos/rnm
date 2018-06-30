@@ -82,13 +82,13 @@ In order to use the script in Windows you need:
 * a Perl installation (for example [ActivePerl](https://www.activestate.com/activeperl) or [Strawberry Perl](http://strawberryperl.com/)). The script has been tested with ActivePerl.
 * copy the `rnm` script and `rnm.bat` to a folder in your execution PATH
 
-The `rmm.bat` batch script is provided as an example: it supposes that both `perl.exe` and `rnm` are in the PATH.
+The `rmm.bat` batch script is provided as an example: it supposes that `perl.exe` is in the PATH, and `rnm` must be preceded by its complete path.
 
 In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH, which provides the `ls` command.
 
 Do not use `rnm -l` in Windows if you are planning to manage file names with UTF-8 characters.
 
-Please, note that Perl code prepended to the regex parameter can fail if Windows files have UTF-8 characters. For example with (please, note that simple and double quotations are changed from the linux example):
+Please, note that Perl code prepended to the regex parameter can fail if Windows file names have UTF-8 characters. For example with (note that simple and double quotations are changed from the above linux example):
 	
 	rnm "$c=strftime '%Y%m%d', localtime(stat($f)->mtime); s/(.+)/$c.$1/" "/./"
 
