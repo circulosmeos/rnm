@@ -62,7 +62,7 @@ prepending a consecutive number starting with '0001'.
 	$ rnm -l 's/^/$counter./' '-rt *.jpg'
 This renames all files with extension ".jpg" in current directory,
 ordered by modification time, prepending a consecutive number 
-starting with '0001'.
+starting with '0000'.
 
 	$ rnm -r '$c=strftime "%Y%m%d", localtime(); s/(.+)/${c}.$1/' '/./'
 This renames recursively all files and folders in the current path,
@@ -76,7 +76,7 @@ prepending their file modification date to every name.
 This renames all filenames with extension ".log" in the current 
 directory, prepending to each one its modification unix timestamp. 
 
-## Windows installation
+## Windows installation and notes
 In order to use the script in Windows you need:
 
 * a Perl installation (for example [ActivePerl](https://www.activestate.com/activeperl) or [Strawberry Perl](http://strawberryperl.com/)). The script has been tested with ActivePerl.
@@ -87,6 +87,12 @@ The `rmm.bat` batch script is provided as an example: it supposes that both `per
 In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH, which provides the `ls` command.
 
 Do not use `rnm -l` in Windows if you are planning to manage file names with UTF-8 characters.
+
+Please, note that Perl code prepended to the regex parameter can fail if Windows files have UTF-8 characters. For example with (please, note that simple and double quotations are changed from the linux example):
+	
+	rnm "$c=strftime '%Y%m%d', localtime(stat($f)->mtime); s/(.+)/$c.$1/" "/./"
+
+Nonetheless, if a pure regex is used, all should run ok.
 
 ## author
 Written by [circulosmeos](mailto:loopidle@gmail.com)
