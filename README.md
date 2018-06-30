@@ -57,6 +57,8 @@ In order to use the script in Windows you need:
 
 The `rmm.bat` batch script is provided as an example: you may need to add the path to your Perl executable if it is not in your PATH.
 
+In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH in order to use the `ls` command.
+
 Do not use `rnm -l` in Windows if you are planning to manage file names with UTF-8 characters.
 
 ## author
