@@ -39,7 +39,7 @@ just the two numbers and the extension.
 There are some variables which can be used
 in the `SUBSTITUTION_PATTERN`:
 
-* `$c='0001'`, this variable is the only one available for writing in the regex
+* `$c='0000'`, this variable is the only one available for writing in the regex
 * `$counter` number of files renamed so far
 * `$_` filename
 * `$d` directory of the file (available only if using `-r`, or `-l` with `-R` or `*`)
@@ -55,7 +55,7 @@ prepending a consecutive number starting with '0000'.
 This renames all files in current directory,
 prepending a consecutive number starting with '1'.
 
-	$ rnm '$c++; s/^/$c./' '/./'
+	$ rnm -r '$c++; s/^/$c./' '/./'
 This renames recursively all files and folders in the current directory,
 prepending a consecutive number starting with '0001'.
 
@@ -84,7 +84,7 @@ In order to use the script in Windows you need:
 
 The `rmm.bat` batch script is provided as an example: it supposes that both `perl.exe` and `rnm` are in the PATH.
 
-In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH in order to use the `ls` command.
+In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH, which provides the `ls` command.
 
 Do not use `rnm -l` in Windows if you are planning to manage file names with UTF-8 characters.
 
