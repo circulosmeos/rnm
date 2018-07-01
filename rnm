@@ -204,23 +204,22 @@ exit(0);
 
 sub filter_list() {
 
-    # This is used only on linux, because unfortunately 
+    # This is used only on linux, because unfortunately
     # File:Find:name uses short MSDOS names in Windows :_(
     my $fpath=$File::Find::name;
     my $fname=basename($fpath);
+    if ( -d $fpath && !$RECURSIVE && $fname ne '.' && $fname ne '..') {
+        $File::Find::prune = 1; # do not recurse
+    }
     #print "$fname, " . dirname($fpath). "\n";
     if (eval('$fname=~'.$pattern) && $fname ne '.' && $fname ne '..') {
-        if ( -d $fname ) {
-            if (!$RECURSIVE) {
-                $File::Find::prune = 1; # do not recurse
-            } else {
-                # put directories at the end
-                push @FILE_LIST_2, $fname;
-                push @PATH_LIST_2, dirname($fpath);
-            }
+        if ( -d $fpath ) {
+            # put directories at the end
+            push @FILE_LIST_2, $fname;
+            push @PATH_LIST_2, dirname($fpath);
         } else {
-                push @FILE_LIST, $fname;
-                push @PATH_LIST, dirname($fpath);
+            push @FILE_LIST, $fname;
+            push @PATH_LIST, dirname($fpath);
         }
     }
 
