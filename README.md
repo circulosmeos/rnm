@@ -29,7 +29,27 @@ The command shows a list of changes to be made,
 which must be confirmed with 'y' (yes).
 If capital 'Y' is entered, the results are written to a log file.
 
-## Examples:
+## Example of output
+
+As you can see, the command shows a list of actions to execute, and requires previous confirmation:
+
+	C:\temp> rnm "$c++; s/^/$c./" "/txt$/"
+
+	Using:
+	        search pattern:         /txt$/
+	        substitution regex:     $c++; s/^/$c./
+	        recursive:              no
+
+	.\Sorcières.txt         ->      .\0001.Sorcières.txt
+	.\Люди Инвалиды.txt     ->      .\0002.Люди Инвалиды.txt
+	.\夢の足音が聞こえる.txt    ->      .\0003.夢の足音が聞こえる.txt
+	.\오렌지캬라멜.txt       ->      .\0004.오렌지캬라멜.txt
+
+	--- (files =~ search pattern: 4)
+	--- files to rename (listed): 4
+	Do you want to rename this file list? (y/ Y(=>log)/ *):
+
+## Examples of use:
 
 	$ rnm 's/(\d{2}\.jpg)/\1/' '/^b.*\d{2}\.jpg$/'
 This renames all jpg images in the current directory which
@@ -88,11 +108,12 @@ In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installati
 
 Do not use `rnm -l` in Windows if you are planning to manage file names with UTF-8 characters.
 
-Please, note that Perl code prepended to the regex parameter can fail if Windows file names have UTF-8 characters. For example with (note that simple and double quotations are changed from the above linux example):
+Please, note that UTF-8 use in regex and code in Windows isn't yet perfect: this warning doesn't refer to UTF-8 file names, which are correctly renamed.
+For example, Perl code prepended to the regex parameter can fail if Windows file names have UTF-8 characters. For example with (note that simple and double quotations are changed from the above linux example):
 	
 	rnm "$c=strftime '%Y%m%d', localtime(stat($f)->mtime); s/(.+)/$c.$1/" "/./"
 
-Nonetheless, if a pure regex is used, all should run ok.
+Nonetheless, if a pure regex without UTF-8 chars is used, all should run ok.
 
 ## author
 Written by [circulosmeos](mailto:loopidle@gmail.com)
