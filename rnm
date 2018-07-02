@@ -65,7 +65,7 @@ my @PATH_LIST_2=();
 
 if ($LS_STYLE) {
     
-    my @ls_file_list=`ls -1a --file-type $pattern`;
+    my @ls_file_list=`ls -1a -p $pattern`;
 
     my $ls_recursive = 0;
     my $path = '';
@@ -79,6 +79,25 @@ if ($LS_STYLE) {
         # filter empty lines and parse directories to *_LIST & *_LIST_2
         $ls_recursive = 2;
         $path ='.';
+    }
+
+    # @ls_file_list may list a directory,
+    # but it is not indicated in the list,
+    # so let's guess it:
+    # (only $ls_recursive==1 affected (using *), because with -R
+    # only the case where an empty dir is listed is not treated here...
+    # but that can be left aside as a pathological case)
+    if ($#ls_file_list > -1 &&
+        $ls_recursive == 2) {
+        my @ls_file_list_d = `ls -1a -p -d $pattern`;
+        if ($#ls_file_list_d == 0) {
+            # There's a directory with elements inside it
+            chomp $ls_file_list_d[0];
+            $path = substr( $ls_file_list_d[0],0,-1 ); # remove trailing '/'
+            # but.... wait! this directory must be affected by the regex also!
+            # and the easiest way is by simulating a ls output:
+            unshift @ls_file_list, $path . ':';
+        }
     }
 
     foreach my $line (@ls_file_list) {
@@ -103,23 +122,26 @@ if ($LS_STYLE) {
                 $path = $1;
                 $treat_dir = 1;
             }
-            if ($treat_dir && $path ne '.') {
-                # put directories at the end
-                my ($path2, $file2) = ($path =~ m#^(.+?)(?:/([^/]+))?$#);
-                ($path2, $file2) = ('.', $path2) if $file2 eq '';
-                if ($OS_WINDOWS) {
-                    # mark Windows folders (for later processing)
-                    $file2 .= $PATH_SEPARATOR;
+            if ($treat_dir) {
+                if ($path ne '.') {
+                    # put directories at the end
+                    my ($path2, $file2) = ($path =~ m#^(.+?)(?:/([^/]+))?$#);
+                    ($path2, $file2) = ('.', $path2) if $file2 eq '';
+                    if ($OS_WINDOWS) {
+                        # mark Windows folders (for later processing)
+                        $file2 .= $PATH_SEPARATOR;
+                    }
+                    push @FILE_LIST_2, $file2;
+                    push @PATH_LIST_2, $path2;
                 }
-                push @FILE_LIST_2, $file2;
-                push (@PATH_LIST_2, $path2);
                 next;
             }
 
-            if ($line !~ m#^\.{1,2}/?$#) { # escape implied directories . and ..
+            if ($line !~ m#^\.{1,2}/?$# && # escape implied directories . and ..
+                $line !~ /^\.:$/) { # escape implied directory with -R '.:'
 
-                if ($line =~ m#^(.+)[/@|=]#) {
-                    # remove `ls --file-type` identifiers from filename
+                if ($line =~ m#^(.+)[/]#) {
+                    # remove directory (`ls -p`) identifiers from filename
                     $file = $1;
                 }
 
@@ -191,6 +213,33 @@ if ($LS_STYLE) {
     }
 }
 
+# remove possible duplicates by converting to a hash of hashes
+my %LIST;
+my $i=0;
+foreach my $path (@PATH_LIST_2) {
+    ${$LIST{$path}}{$FILE_LIST_2[$i]} = 1;
+    $i++;
+}
+# and travel the hash to separate arrays again
+@FILE_LIST_2 = ();
+@PATH_LIST_2 = ();
+foreach my $path (keys %LIST) {
+    foreach my $file (keys %{$LIST{$path}}) {
+        push @FILE_LIST_2, $file;
+        push @PATH_LIST_2, $path;
+    }
+}
+
+# reorder directories, so that the renaming progresses from
+# deeper subdirectories to upper ones; or equivalently
+# from longer strings, to shorter ones.
+# So let's inversely reorder the index based on path lengths:
+# (https://www.perlmonks.org/?node_id=878679)
+my @index = 0..$#PATH_LIST_2;
+@index = sort { length($PATH_LIST_2[$b]) <=> length($PATH_LIST_2[$a]) } @index;
+@FILE_LIST_2 = @FILE_LIST_2[@index];
+@PATH_LIST_2 = @PATH_LIST_2[@index];
+
 # put directories at the end,
 # so the recursive renaming of files inside them isn't affected
 # by the (possible) renaming of the directories themselves.
@@ -221,12 +270,12 @@ sub filter_list() {
     # File:Find:name uses short MSDOS names in Windows :_(
     my $fpath=$File::Find::name;
     my $fname=basename($fpath);
-    if ( -d $fpath && !$RECURSIVE && $fname ne '.' && $fname ne '..') {
+    if ( -d $fname && !$RECURSIVE && $fname ne '.' && $fname ne '..') {
         $File::Find::prune = 1; # do not recurse
     }
-    #print "$fname, " . dirname($fpath). "\n";
+
     if (eval('$fname=~'.$pattern) && $fname ne '.' && $fname ne '..') {
-        if ( -d $fpath ) {
+        if ( -d $fname ) {
             # put directories at the end
             push @FILE_LIST_2, $fname;
             push @PATH_LIST_2, dirname($fpath);
@@ -332,7 +381,7 @@ sub process_file_list() {
         chomp;
         $is_windows_folder = 0;
         if ($OS_WINDOWS) { # treat directories as files, in Windows
-            if ( $_ =~ /.+\Q$PATH_SEPARATOR$/ ) {
+            if ( $_ =~ /.+\Q$PATH_SEPARATOR\E$/ ) {
                 $is_windows_folder = 1;
                 $_ = substr($_,0,-1);
             }
@@ -428,6 +477,8 @@ whilst in Windows double quotation marks are needed: ""
 
 -l: Use `ls` command modifiers as last parameter, instead of a regex.
     Limitations of -l:
+    * USE WITH CAUTION as this just parses ls output. Preferred
+    method should be `rnm` or `rnm -r` in general.
     * -l is not compatible with `rnm -r`
     * In Windows, there must be a cygwin `ls` in the PATH, and UTF-8 
     is not supported.
@@ -457,6 +508,6 @@ For example:
 
 Written by circulosmeos (//github.com/circulosmeos) 
 GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
-2018-06
+2018-07
 
 MAN_PAGE_END

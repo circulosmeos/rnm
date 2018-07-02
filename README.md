@@ -25,6 +25,8 @@ whilst in Windows double quotation marks are needed: " "
 	treated throu the PATTERN SUBSTITUTION as if they were files.
 Limitations of **-l**:
 
+* USE WITH CAUTION as this just parses ls output. Preferred
+    method should be `rnm` or `rnm -r` in general.
 * -l is not compatible with `rnm -r`
 * In Windows, there must be a cygwin `ls` in the PATH, and UTF-8 
     is not supported.
@@ -123,7 +125,7 @@ Nonetheless, if a pure regex without UTF-8 chars is used, all should run ok.
 Written by [circulosmeos](mailto:loopidle@gmail.com)
 
 ## version
-2018-06
+2018-07
 
 ## license
 [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)
