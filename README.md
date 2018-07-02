@@ -17,8 +17,12 @@ whilst in Windows double quotation marks are needed: " "
 
 **-r**: recursively filter all files and folders under current path.
     If "-r" is not used, only files under current path are processed.
+    Please, note that if `FILTER_REGEX` lists folders, they will be
+	treated throu the PATTERN SUBSTITUTION as if they were files.
 
 **-l**: Use `ls` command modifiers as last parameter, instead of a regex.
+	Please, note that if `LIST_PATTERN` lists folders, they will be
+	treated throu the PATTERN SUBSTITUTION as if they were files.
 Limitations of **-l**:
 
 * -l is not compatible with `rnm -r`

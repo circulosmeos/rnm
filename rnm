@@ -84,6 +84,7 @@ if ($LS_STYLE) {
     foreach my $line (@ls_file_list) {
         chomp $line;
         my $file = $line;
+        my $treat_dir = 0;
 
         if ($line !~ /^ ?$/) {
 
@@ -93,13 +94,25 @@ if ($LS_STYLE) {
                 # and properly store it with consecutive files
                 $path = $1;
                 $path = '.' if $path eq '';
-                next;
+                $treat_dir = 1;
             } elsif (
                 $ls_recursive == 2 &&
                 $line =~ m#^(.+):$# && $previous_line eq '') {
                 # this is a directory collection, so retain 
                 # and properly store it with consecutive files
                 $path = $1;
+                $treat_dir = 1;
+            }
+            if ($treat_dir && $path ne '.') {
+                # put directories at the end
+                my ($path2, $file2) = ($path =~ m#^(.+?)(?:/([^/]+))?$#);
+                ($path2, $file2) = ('.', $path2) if $file2 eq '';
+                if ($OS_WINDOWS) {
+                    # mark Windows folders (for later processing)
+                    $file2 .= $PATH_SEPARATOR;
+                }
+                push @FILE_LIST_2, $file2;
+                push (@PATH_LIST_2, $path2);
                 next;
             }
 
