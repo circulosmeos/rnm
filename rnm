@@ -2,58 +2,132 @@
 # Rename files (and folders) using Perl regular expressions (regex),
 # in linux and Windows, recursively (if desired) and with UTF-8 support.
 # Use:
-# rnm [-lr] 's/PATTERN/SUBSTITUTION/' {'/FILTER_REGEX/' | 'LIST_PATTERN'}
+# rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' 'FILTER' [PATH]
 # 
-# by circulosmeos 200408, 200508, 200509, 201806
+# by circulosmeos 200408, 200508, 200509, 201806-07
 # release under GPL 3 //www.gnu.org/licenses/gpl-3.0.en.html
 # 
 use strict;
 use File::Find;
-use File::Basename;
 use POSIX qw(strftime);
 use File::stat; # in order to use a regex as: rnm -l '$c=stat($_)->mtime; s/(.+)/$c/' '-rt'
+use Encode;
 
 my $fso; # for Windows Win32::OLE Scripting.FileSystemObject
 
 BEGIN {
-if ( $^O=~/win32/i ) {
-    eval q{
-        # https://www.perlmonks.org/?node_id=1170561
-        # by nikosv on Sep 02, 2016 at 04:32 UTC
-        # https://www.perlmonks.org/?node_id=250957
-        # by t'mo (Pilgrim) on Apr 18, 2003 at 05:26 UTC
-        use Win32::Console;
-        Win32::Console::OutputCP( 65001 );
-        use Win32::OLE qw(in);
-        binmode(STDOUT, ":utf8");
-        Win32::OLE->Option(CP => Win32::OLE::CP_UTF8);
-        $fso = Win32::OLE->new('Scripting.FileSystemObject');
-        }
+    if ( $^O=~/win32/i ) {
+        eval q{
+            # https://www.perlmonks.org/?node_id=1170561
+            # by nikosv on Sep 02, 2016 at 04:32 UTC
+            # https://www.perlmonks.org/?node_id=250957
+            # by t'mo (Pilgrim) on Apr 18, 2003 at 05:26 UTC
+            use Win32::Console;
+            Win32::Console::OutputCP( 65001 );
+            use Win32::OLE qw(in);
+            binmode(STDIN, ":utf8");
+            binmode STDOUT;
+            use utf8;
+            Win32::OLE->Option(CP => Win32::OLE::CP_UTF8);
+            $fso = Win32::OLE->new('Scripting.FileSystemObject');
+            }
     }
 }
 
 my $OS_WINDOWS=(($^O=~/win32/i)?1:0);
 
-my $PATH_SEPARATOR = (($OS_WINDOWS)?'\\':'/');
+my $PATH_SEPARATOR = ( ($OS_WINDOWS)? '\\' : '/' );
+my $QUOTES         = ( ($OS_WINDOWS)? '"'  : "['\"]" );
 
 my $RECURSIVE = 0;
 my $LS_STYLE = 0;
-my ($regexp, $pattern);
-($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
+my $ANSWER ='';
+my $TREAT_DIRECTORIES = 0;
+my ($parameters, $regexp, $pattern, $path_parameter) = ('', '', '', '');
 
-if ($regexp =~ /\-[rl]/) {
-    $RECURSIVE = 1 if $regexp =~ /r/;
-    $LS_STYLE = 1  if $regexp =~ /l/;
-    ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;    
+if ( $#ARGV <= 0 && -p STDIN) {
+    # read parameters from STDIN:
+
+    my $stdin_parameters;
+    $stdin_parameters = <STDIN>;
+    chomp $stdin_parameters;
+    (($parameters, $regexp, $pattern, $path_parameter) =
+        $stdin_parameters =~
+            m#^ *(\-[dlnNryY]+ +)?${QUOTES}?(.*?s/.*?/.*?/)${QUOTES}? +(${QUOTES}?.*?${QUOTES}?) +(${QUOTES}?.*?${QUOTES}?)$#) ||
+                die <<INCORRECT_PARAMETERS;
+ERROR:
+regex and/or pattern have incorrect format:
+received: '$stdin_parameters'
+whilst '[-dlnNryY] "... s/.../.../" "..." "..."' expected.
+Nothing has been done.
+
+INCORRECT_PARAMETERS
+    if ($pattern eq '') {
+        # parameters are optional
+        $pattern = $regexp;
+        $regexp = $parameters;
+        $parameters = '';
+    }
+    $pattern = $1 if $pattern=~/^"(.*)"/;
+    if ( $path_parameter=~/^"(.*)"/ ) {
+        $path_parameter = $1;
+    } elsif ( $path_parameter =~ /^\. $/ ) { # patch unquoted param for current path
+        $path_parameter='.';
+    }
+    $parameters = shift @ARGV if ( $#ARGV==0 &&
+            $parameters eq '' # parameters on pipe take precedence over cmdline
+        );
+
+} else {
+    # parameters passed after command, like usual
+
+    ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
+
+    if ($regexp =~ /\-[dlnNryY]+/) {
+        $parameters = $regexp;
+        ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
+    }
+
+    ($pattern = shift @ARGV) || goto SHOW_MAN_PAGE;
+
+    ($path_parameter = shift @ARGV);
+
+}
+
+# implicit path is actual path:
+$path_parameter='.' if $path_parameter eq '';
+# remove ending path separator just for pretty printing:
+$path_parameter = substr($path_parameter, 0, -1) if ($path_parameter =~ m#\Q$PATH_SEPARATOR\E$#);
+
+if ($parameters ne '') {
+        $RECURSIVE = 1 if $parameters =~ /r/;
+        $LS_STYLE = 1  if $parameters =~ /l/;
+        # negative answers take precedence over affirmative ones, and writes to log over don'ts
+        $ANSWER = 'y'  if $parameters =~ /y/;
+        $ANSWER = 'Y'  if $parameters =~ /Y/;
+        $ANSWER = 'n'  if $parameters =~ /n/;
+        $ANSWER = 'N'  if $parameters =~ /N/;
+        $TREAT_DIRECTORIES = 1 if $parameters =~ /d/;
 }
 
 die "\nERROR: \nmodifiers -l and -r are mutually exclusive.\nNothing has been done.\n\n" 
     if ($RECURSIVE && $LS_STYLE);
 
-die "\nERROR: \nthe regex: '$regexp'\nhas not the correct format: 's/.../.../'\nNothing has been done.\n\n"
-    if ($regexp !~ /^.+\/.*\/.*\/\w*$/);
+if ($regexp !~ /^.+\/.*\/.*\/\w*$/) {
+    print "\nERROR: \nthe regex: '$regexp'\nhas not the correct format: 's/.../.../'\n";
+    if ($OS_WINDOWS) {
+        print "In Windows, please use double quotes (\") around your parameters.\n";
+    }
+    print "Nothing has been done.\n\n";
+    exit;
+}
 
-($pattern = shift @ARGV) || goto SHOW_MAN_PAGE;
+
+if ( $^O=~/win32/i ) {
+    eval q{
+        binmode(STDIN);
+    }
+}
 
 
 my @FILE_LIST=();
@@ -62,10 +136,39 @@ my @PATH_LIST=();
 my @FILE_LIST_2=();
 my @PATH_LIST_2=();
 
+my $fLog;
+
+
+print "Using:\n";
+# Use print_message() whenever UTF-8 maybe involved
+print_message( "\tpath:        \t\t$path_parameter\n" );
+if ($LS_STYLE) {
+    print_message( "\tlist:\t\t\tls -1 $pattern\n" );
+} else {
+    print_message( "\tsearch pattern:\t\t$pattern\n" );
+}
+print_message( "\tsubstitution regex:\t$regexp\n" );
+print "\trecursive:   \t\t" . (($RECURSIVE)?'YES':'no') . "\n" if (!$LS_STYLE);
+print "\ttreat directories:\t" . (($TREAT_DIRECTORIES)?'YES':'no') . "\n";
+print "\tWARNING!:\t\tWILL NOT ASK FOR CONFIRMATION!\t" if $ANSWER=~/y/i;
+print "\n";
+
+if ( ( !$OS_WINDOWS && ! -d $path_parameter ) ||
+     (  $OS_WINDOWS && ! $fso->GetFolder($path_parameter) )
+    ) {
+    print_message( "\nERROR:\nPath '$path_parameter' is not a valid directory.\n" );
+    exit 1;
+}
 
 if ($LS_STYLE) {
     
-    my @ls_file_list=`ls -1a -p $pattern`;
+    my @ls_file_list;
+    if ($pattern eq '*') {
+        @ls_file_list=`ls -1a -p ${path_parameter}/$pattern`;
+        print "ls -1a -p ${path_parameter}/$pattern\n";
+    } else {
+        @ls_file_list=`ls -1a -p $pattern $path_parameter`;
+    }
 
     my $ls_recursive = 0;
     my $path = '';
@@ -89,7 +192,7 @@ if ($LS_STYLE) {
     # but that can be left aside as a pathological case)
     if ($#ls_file_list > -1 &&
         $ls_recursive == 2) {
-        my @ls_file_list_d = `ls -1a -p -d $pattern`;
+        my @ls_file_list_d = `ls -1a -p -d $pattern $path_parameter`;
         if ($#ls_file_list_d == 0) {
             # There's a directory with elements inside it
             chomp $ls_file_list_d[0];
@@ -195,156 +298,190 @@ if ($LS_STYLE) {
             my $path = shift;
             #print "Scanning '$path' ...\n";
             my $folder = $fso->GetFolder($path);
-            if ($RECURSIVE) {
-                foreach my $subdir ( in $folder->SubFolders ) {
-                    visit($subdir, $path, 1); # treat also directories as files for pattern substitution
-                    scan_directory($path . $PATH_SEPARATOR . $subdir->Name);
-                }
+            foreach my $subdir ( in $folder->SubFolders ) {
+                visit($subdir, $path, 1) if $TREAT_DIRECTORIES; # treat also directories as files for pattern substitution
+                scan_directory($path . $PATH_SEPARATOR . $subdir->Name) if $RECURSIVE;
             }
             foreach my $file ( in $folder->Files ) { visit($file, $path, 0) }
         }
 
-        scan_directory( "." );
+        scan_directory( ($path_parameter ne '')? $path_parameter : '.' );
 
     } else {
 
-        find(\&filter_list, './');
+        find( { wanted => \&filter_list,
+                no_chdir => 1,  # do not descend to dirs, but use complete path
+                preprocess => sub { sort { $a cmp $b } @_ }, # order files
+                },
+            ($path_parameter ne '')? $path_parameter : './' );
 
     }
 }
 
-# remove possible duplicates by converting to a hash of hashes
-my %LIST;
-my $i=0;
-foreach my $path (@PATH_LIST_2) {
-    ${$LIST{$path}}{$FILE_LIST_2[$i]} = 1;
-    $i++;
-}
-# and travel the hash to separate arrays again
-@FILE_LIST_2 = ();
-@PATH_LIST_2 = ();
-foreach my $path (keys %LIST) {
-    foreach my $file (keys %{$LIST{$path}}) {
-        push @FILE_LIST_2, $file;
-        push @PATH_LIST_2, $path;
+
+#print join("\n", @FILE_LIST_2);
+if ($TREAT_DIRECTORIES) {
+    # remove possible duplicates by converting to a hash of hashes
+    my %LIST;
+    my $i=0;
+    foreach my $path (@PATH_LIST_2) {
+        ${$LIST{$path}}{$FILE_LIST_2[$i]} = 1;
+        $i++;
     }
+    # and travel the hash to separate arrays again
+    @FILE_LIST_2 = ();
+    @PATH_LIST_2 = ();
+    foreach my $path (keys %LIST) {
+        foreach my $file (keys %{$LIST{$path}}) {
+            push @FILE_LIST_2, $file;
+            push @PATH_LIST_2, $path;
+        }
+    }
+
+    # reorder directories, so that the renaming progresses from
+    # deeper subdirectories to upper ones; or equivalently
+    # from longer strings, to shorter ones.
+    # So let's inversely reorder the index based on path lengths (|| filename-alphabetically if equal lengths):
+    # (https://www.perlmonks.org/?node_id=878679)
+    my @index = 0..$#PATH_LIST_2;
+    @index = sort { length($PATH_LIST_2[$b]) <=> length($PATH_LIST_2[$a]) || ($FILE_LIST_2[$a] cmp $FILE_LIST_2[$b]) } @index;
+    @FILE_LIST_2 = @FILE_LIST_2[@index];
+    @PATH_LIST_2 = @PATH_LIST_2[@index];
+
+    # put directories at the end,
+    # so the recursive renaming of files inside them isn't affected
+    # by the (possible) renaming of the directories themselves.
+    push (@FILE_LIST, @FILE_LIST_2);
+    push (@PATH_LIST, @PATH_LIST_2);
 }
 
-# reorder directories, so that the renaming progresses from
-# deeper subdirectories to upper ones; or equivalently
-# from longer strings, to shorter ones.
-# So let's inversely reorder the index based on path lengths:
-# (https://www.perlmonks.org/?node_id=878679)
-my @index = 0..$#PATH_LIST_2;
-@index = sort { length($PATH_LIST_2[$b]) <=> length($PATH_LIST_2[$a]) } @index;
-@FILE_LIST_2 = @FILE_LIST_2[@index];
-@PATH_LIST_2 = @PATH_LIST_2[@index];
 
-# put directories at the end,
-# so the recursive renaming of files inside them isn't affected
-# by the (possible) renaming of the directories themselves.
-push (@FILE_LIST, @FILE_LIST_2);
-push (@PATH_LIST, @PATH_LIST_2);
-
-
-print "Using:\n";
-if ($LS_STYLE) {
-    print "\tlist:\t\t\tls -1 $pattern\n";
-} else {
-    print "\tsearch pattern:\t\t$pattern\n";
-}
-print "\tsubstitution regex:\t$regexp\n";
-print "\trecursive:\t\t" . (($RECURSIVE)?'YES':'no') . "\n" if (!$LS_STYLE);
-print "\n";
-
-
-&rename($regexp, \@FILE_LIST, \@PATH_LIST);
+&rename_array( $regexp, \@FILE_LIST, \@PATH_LIST, ($TREAT_DIRECTORIES? (($#FILE_LIST_2!=-1)?($#FILE_LIST_2+1):0) : 0) );
 
 
 exit(0);
 
 
-sub filter_list() {
+sub print_message {
+    # prints sensitive chars using encode() selectively depending on platform
 
-    # This is used only on linux, because unfortunately
+    my $message = shift;
+    my $fLog = shift;
+
+    if ( $OS_WINDOWS ) {
+        print encode('UTF-8', $message);
+        print ( {$$fLog} $message) if $fLog;
+    } else {
+        print $message;
+        print ( {$$fLog} decode('UTF-8', $message) ) if $fLog;
+    }
+
+}
+
+
+sub filter_list {
+    # find()+filter_list() is used only on linux, because unfortunately
     # File:Find:name uses short MSDOS names in Windows :_(
-    my $fpath=$File::Find::name;
-    my $fname=basename($fpath);
-    if ( -d $fname && !$RECURSIVE && $fname ne '.' && $fname ne '..') {
+
+    my $fpath=$File::Find::dir;
+    # File::Find::name is the complete file path = { path + filename }
+    my ($fname) = ($File::Find::name =~ m#^${File::Find::dir}/(.+)$#);
+    if ( -d $File::Find::name && !$RECURSIVE && $fname ne '' && $fname ne '.' && $fname ne '..') {
         $File::Find::prune = 1; # do not recurse
     }
 
-    if (eval('$fname=~'.$pattern) && $fname ne '.' && $fname ne '..') {
-        if ( -d $fname ) {
+    if (eval('$fname=~'.$pattern) && $fname ne '' && $fname ne '.' && $fname ne '..') {
+        if ( -d $File::Find::name ) {
             # put directories at the end
             push @FILE_LIST_2, $fname;
-            push @PATH_LIST_2, dirname($fpath);
+            push @PATH_LIST_2, $fpath;
         } else {
             push @FILE_LIST, $fname;
-            push @PATH_LIST, dirname($fpath);
+            push @PATH_LIST, $fpath;
         }
     }
 
 }
 
 
-sub rename() {
+sub rename_array {
 
     my $LOG_FILE;
 
     my $regexp = shift @_;
     my $FILE_LIST = shift @_;
-    my ($PATH_LIST, @PATH_LIST);
-    if ($#_==0) {
-        $PATH_LIST = shift @_;
-    }
-
-    my $LOG=1;
+    my $PATH_LIST = shift @_;
+    # number of directories to rename, 0 if ! $TREAT_DIRECTORIES :
+    my $directories_to_rename = shift @_;
 
     my $counter=0;
     my $errors=0;
 
 
-    ($counter, $errors) = &process_file_list( $regexp, $FILE_LIST, $PATH_LIST, 0, $LOG );
+    ($counter, $errors) = &process_file_list( $regexp, $FILE_LIST, $PATH_LIST, 0, '');
 
 
     print "\n";
-    print '--- (files =~ search pattern: '.($#{$FILE_LIST}+1).")\n";
-    print '--- files to rename (listed): '.($counter+0)."\n";
-    print 'Do you want to rename this file list? ';
-    if ($LOG==1) {
-        print '(y/ Y(=>log)/ *):';
+    if (!$TREAT_DIRECTORIES) {
+        print '--- (files =~ search pattern: '. ($#{$FILE_LIST}+1) .")\n";
+        print '--- files to rename (listed): '. ($counter+0) ."\t(<=";
     } else {
-        print '(y/*):';
+        print '--- (files =~ search pattern: '. ($#{$FILE_LIST}+1 - $directories_to_rename) .")\n";
+        print '--- (directories =~ search pattern: '. $directories_to_rename .")\n";
+        print '--- files & directories to rename (listed): '. ($counter+0) ."\t(<=";
     }
-    my $ANSWER=getc;
-    if ($ANSWER !~ /y/i) {
+    print ''. ($#{$FILE_LIST}+1) . "\)\n";
+
+    if ( $ANSWER =~ /y/i ) {
+        print "\nListed files will be modified now!\n";
+        sleep (5);
+    } elsif ( $ANSWER =~ /n/i ) {
+        ; # nothing is asked
+    } else {
+        print 'Do you want to rename this file list? ';
+        print '(y/ Y(=>log)/ *):';
+
+        if ( !$OS_WINDOWS ) {
+            STDOUT->flush();
+            # in the case that stdin was used to pass parameters,
+            # redirect STDIN from pipe to keyboard
+            # (this works on linux, but not on Windows (so use -y/-Y there to execute))
+            open(STDIN,"<&1") || print "Can't reopen STDIN: $!";
+        }
+
+        $ANSWER=getc;
+
+    }
+
+    if ( $ANSWER !~ /y/i ) {
         print "\nCANCELLED. Nothing has been done.\n";
-        exit;
+        exit if $ANSWER ne 'N';
     }
-    if ($ANSWER eq 'Y' && $LOG == 1) {
+    if ( $ANSWER eq 'Y' || $ANSWER eq 'N' ) {
         $_ = strftime '%Y%m%d%H%M%S', localtime;
         chomp;
         $LOG_FILE='./rename.'.$_.'.log';
         if (-e $LOG_FILE) {
             print "\nLog file won't be created because already exists '$LOG_FILE'\n";
-            $ANSWER='y';
+            $ANSWER = 'y';
+        } else {
+            open $fLog, '>:encoding(UTF-8)', $LOG_FILE or die "\nLog file '$LOG_FILE' could not be created.\n";
+            print $fLog "Renaming files:\ndate: ".(scalar localtime)."\n\n";
         }
-        open fLog, '>:encoding(UTF-8)', $LOG_FILE or die "\nLog file '$LOG_FILE' could not be created.\n";
-        print fLog "Renaming files:\ndate: ".(scalar localtime)."\n\n";
     }
-    print "\nACTIONS:\n";
+    print "\nACTIONS:\n" if $ANSWER=~/y/i;
+    print "\nThese actions would have been done:\n" if $ANSWER eq 'N';
 
 
-    ($counter, $errors) = &process_file_list( $regexp, $FILE_LIST, $PATH_LIST, 1, $LOG, $ANSWER );
+    ($counter, $errors) = &process_file_list( $regexp, $FILE_LIST, $PATH_LIST, (($ANSWER=~/y/i)?1:0), $ANSWER );
 
 
-    print "\n".($counter+0)." files renamed\n";
+    print "\n".($counter+0)." files renamed\n" if $ANSWER=~/y/i;
     print "\n".($errors)." errors\n" if ($errors>0);
-    if ($ANSWER eq 'Y' && $LOG == 1) {
+    if ( $ANSWER eq 'Y' || $ANSWER eq 'N' ) {
         print "\nFile log created: $LOG_FILE\n";
-        print fLog "\n".($counter+0)." files renamed\n";
-        print fLog "\n".($errors)." errors\n" if ($errors>0);
+        print $fLog "\n".($counter+0)." files ". (($ANSWER=~/N/i)?'would have been ':'') ."renamed\n";
+        print $fLog "\n".($errors)." errors\n" if ($errors>0);
     }
 
     return;
@@ -352,17 +489,14 @@ sub rename() {
 }
 
 
-sub process_file_list() {
+sub process_file_list {
 
     my $regexp = shift;
     my @FILE_LIST = @{(shift)}; # an array passed by reference
     my $PATH_LIST = shift;        # an array passed by reference
     my @PATH_LIST = @$PATH_LIST if defined $PATH_LIST; # if !defined $PATH_LIST, @PATH_LIST is left undefined also
     my $ACTION = shift;
-    my $LOG = shift;
-    my $ANSWER;
-
-    $ANSWER = shift if ($ACTION);
+    my $ANSWER = shift;
 
     my $temp;
     my $counter = '0000';
@@ -408,11 +542,11 @@ sub process_file_list() {
             $old_name=$PATH_LIST[$i]. $PATH_SEPARATOR .$old_name;
         }
 
-        print $old_name." \t-> \t".$_."\n";
+        print_message( $old_name." \t-> \t".$_."\n",
+            ($ANSWER eq 'Y' || $ANSWER eq 'N')? $fLog: '' );
 
         if ($ACTION) {
 
-            print fLog $old_name." \t-> \t".$_."\n" if ($ANSWER eq 'Y' && $LOG == 1);
             if ((-e $_ && lc($old_name) eq lc($_)) || !-e $_) { # only if the renamed filename doesn't exist (case sensitive)
                 $ERROR=0;
                 if ($OS_WINDOWS) {
@@ -433,15 +567,15 @@ sub process_file_list() {
                     }
                 }
                 if ($ERROR==1) {
-                    print '!!! "'.$old_name."\" not renamed. '$!'\n";
-                    print fLog '!!! "'.$old_name."\" not renamed. '$!'\n" if ($ANSWER eq 'Y' && $LOG == 1);
+                    print_message( '!!! "'.$old_name."\" not renamed. '$!'\n",
+                        ($ANSWER eq 'Y')? $fLog: '' );
                     $errors++;
                 } else {
                     $counter++;
                 }       
             } else {
-                print '!!! "'.$old_name."\" not renamed. Already exists \"$_\"\n";
-                print fLog '!!! "'.$old_name."\" not renamed. Already exists \"$_\"\n" if ($ANSWER eq 'Y' && $LOG == 1);
+                print_message( '!!! "'.$old_name."\" not renamed. Already exists \"$_\"\n",
+                    ($ANSWER eq 'Y')? $fLog: '' );
                 $errors++;
             }
 
@@ -467,29 +601,53 @@ so that you can check that everything will be correctly renamed.
 All the renaming actions can be exported to a text file.
 
 Use:
-rnm [-lr] 's/PATTERN/SUBSTITUTION/' {'/FILTER_REGEX/' | 'LIST_PATTERN'}
+rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' 'FILTER' [PATH]
+
+where FILTER is one of: {'/FILTER_REGEX/' | 'LIST_PATTERN'}
+depending on if "-r" or nothing is used (so FILTER_REGEX is needed)
+or "-l" is used (so LIST_PATTERN is needed).
+
+If PATH is not indicated, "." is used.
 
 Please note that in linux simple quotation marks are preferred: '' 
 whilst in Windows double quotation marks are needed: ""
 
--r: recursively filter all files and folders under current path.
-    If "-r" is not used, only files under current path are processed.
+-d: treat directory names when parsing and renaming.
+    If it is not indicated, directory names are ignored.
+    Versions previous to 2018-07.13 treat always directories.
 
--l: Use `ls` command modifiers as last parameter, instead of a regex.
+-l: Use `ls` command modifiers as FILTER parameter, instead of a regex.
     Limitations of -l:
-    * USE WITH CAUTION as this just parses ls output. Preferred
-    method should be `rnm` or `rnm -r` in general.
+    * USE WITH CAUTION as this JUST TRIES TO PARSE LS OUTPUT.
+      Preferred method should be `rnm` or `rnm -r` in general.
     * -l is not compatible with `rnm -r`
     * In Windows, there must be a cygwin `ls` in the PATH, and UTF-8 
     is not supported.
+
+-n: when asked for confirmation a "NO" is automatically answered.
+-N: as "-n", but output is also written to a log file in current path.
+
+-r: recursively filter all files and folders.
+    If "-r" is not used, only files under current path are processed.
+
+-y: when asked for confirmation a "YES" is automatically answered.
+-Y: as "-y", but output is also written to a log file in current path.
 
 The command shows a list of changes to be made, 
 which must be confirmed with 'y' (yes).
 If capital 'Y' is entered, the results are written to a log file.
 
+Parameters can also be indicated using stdin.
+In this case PATH is compulsory.
+The stdin input for parameters is needed in Windows in order to
+use UTF-8 characters on regex, FILTER and/or PATH. Note that a cmd
+console with UTF-8 support must be used. `CMD [/U]` isn't appropriate
+in general, even with UTF-8 fonts. In Windows, if stdin is used,
+-[yY] would be needed because input cannot be read from the keyboard.
+
 Examples:
 
-\$ rnm 's/(\d{2}\.jpg)/\\1/' '/^b.*\d{2}\.jpg\$/'
+\$ rnm 's/(\d{2}\.jpg)/\\1/' '/^b.*\\d{2}\.jpg\$/'
     This renames all jpg images in the current directory which
     name starts with letter 'b' and end with two numbers, for
     just the two numbers and the extension.
@@ -506,8 +664,13 @@ For example:
     This renames all filenames with extension ".log" in the current 
     directory, prepending to each one its modification unix timestamp. 
 
+In Windows, to substitute "の" japanese hiragana char with "の - ":
+(Note though that -[yY] is needed in order to actually take actions)
+
+C:\\temp> echo  "s/(の)/\\1 - /"  "/./"  |  rnm
+
 Written by circulosmeos (//github.com/circulosmeos) 
 GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
-2018-07
+2018-07.13
 
 MAN_PAGE_END

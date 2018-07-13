@@ -10,30 +10,49 @@ All the renaming actions can be exported to a text file.
 
 ## Use:
 
-	rnm [-lr] 's/PATTERN/SUBSTITUTION/' {'/FILTER_REGEX/' | 'LIST_PATTERN'}
+	rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' 'FILTER' [PATH]
 
-Please note that in linux simple quotation marks are preferred: ' ' 
-whilst in Windows double quotation marks are needed: " "
+where FILTER is one of: {`/FILTER_REGEX/` | `LIST_PATTERN`}
+depending on if `-r` or nothing is used (so FILTER_REGEX is needed)
+or `-l` is used (so LIST_PATTERN is needed).
 
-**-r**: recursively filter all files and folders under current path.
-    If "-r" is not used, only files under current path are processed.
-    Please, note that if `FILTER_REGEX` lists folders, they will be
-	treated throu the PATTERN SUBSTITUTION as if they were files.
+If PATH is not indicated, `.` is used.
 
-**-l**: Use `ls` command modifiers as last parameter, instead of a regex.
-	Please, note that if `LIST_PATTERN` lists folders, they will be
-	treated throu the PATTERN SUBSTITUTION as if they were files.
-Limitations of **-l**:
+Please note that in linux simple quotation marks are preferred: ''
+whilst in Windows double quotation marks are needed: ""
 
-* USE WITH CAUTION as this just parses ls output. Preferred
-    method should be `rnm` or `rnm -r` in general.
+**-d**: treat directory names when parsing and renaming.
+    If it is not indicated, directory names are ignored.
+    Versions previous to 2018-07.13 treat always directories.
+
+**-l**: Use `ls` command modifiers as FILTER parameter, instead of a regex.
+    Limitations of -l:
+* USE WITH CAUTION as this JUST TRIES TO PARSE LS OUTPUT.
+  Preferred method should be `rnm` or `rnm -r` in general.
 * -l is not compatible with `rnm -r`
 * In Windows, there must be a cygwin `ls` in the PATH, and UTF-8 
-    is not supported.
+is not supported.
+
+**-n**: when asked for confirmation a "NO" is automatically answered.
+**-N**: as `-n`, but output is also written to a log file in current path.
+
+**-r**: recursively filter all files and folders.
+    If `-r` is not used, only files under current path are processed.
+
+**-y**: when asked for confirmation a "YES" is automatically answered.
+**-Y**: as `-y`, but output is also written to a log file in current path.
 
 The command shows a list of changes to be made, 
 which must be confirmed with 'y' (yes).
 If capital 'Y' is entered, the results are written to a log file.
+
+Parameters can also be indicated using stdin.
+In this case PATH is compulsory.
+The stdin input for parameters is needed in Windows in order to
+use UTF-8 characters on regex, FILTER and/or PATH. Note that a cmd
+console with UTF-8 support must be used. `CMD [/U]` isn't appropriate
+in general, even with UTF-8 fonts. In Windows, if stdin is used,
+`-[yY]` would be needed because input cannot be read from the keyboard.
 
 ## Example of output
 
@@ -42,9 +61,11 @@ As you can see, the command shows a list of actions to execute, and requires pre
 	C:\temp> rnm "$c++; s/^/$c./" "/txt$/"
 
 	Using:
+	        path:                   .
 	        search pattern:         /txt$/
 	        substitution regex:     $c++; s/^/$c./
 	        recursive:              no
+	        treat directories:      no
 
 	.\Sorcières.txt         ->      .\0001.Sorcières.txt
 	.\Люди Инвалиды.txt     ->      .\0002.Люди Инвалиды.txt
@@ -57,8 +78,8 @@ As you can see, the command shows a list of actions to execute, and requires pre
 
 ## Examples of use:
 
-	$ rnm 's/(\d{2}\.jpg)/\1/' '/^b.*\d{2}\.jpg$/'
-This renames all jpg images in the current directory which
+	$ rnm 's/(\d{2}\.jpg)/\1/' '/^b.*\d{2}\.jpg$/' temp
+This renames all jpg images in "temp" subdirectory which
 name starts with letter 'b' and end with two numbers, for
 just the two numbers and the extension.
 
@@ -91,7 +112,7 @@ ordered by modification time, prepending a consecutive number
 starting with '0000'.
 
 	$ rnm -r '$c=strftime "%Y%m%d", localtime(); s/(.+)/${c}.$1/' '/./'
-This renames recursively all files and folders in the current path,
+This renames recursively all files and folders in the current directory,
 prepending the current date to every name.
 
 	$ rnm '$c=strftime "%Y%m%d", localtime(stat($f)->mtime); s/(.+)/$c.$1/' '/\.log$/'
@@ -114,18 +135,28 @@ In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installati
 
 Do not use `rnm -l` in Windows if you are planning to manage file names with UTF-8 characters.
 
-Please, note that UTF-8 use in regex and code in Windows isn't yet perfect: this warning doesn't refer to UTF-8 file names, which are correctly renamed.
+If your are planning to manage file names with UTF-8 chars (mostly outside Latin-1), a console with proprer UTF-8 I/O must be used. Windows' `CMD.EXE` isn't 100% adequate, even after installing UTF-8 fonts (See [serganov fonts](https://math.berkeley.edu/~serganov/ilyaz.org/software/fonts/) and [metacpan UI-KeyboardLayout](https://metacpan.org/pod/distribution/UI-KeyboardLayout/lib/UI/KeyboardLayout.pm#The-console-font-configuration)), because some visual artifacts remain. Instead, [ConEmu]( https://conemu.github.io/) is suitable.
+
+**Please, note that UTF-8 use in regex and code in Windows isn't yet perfect** (this warning doesn't refer to UTF-8 file names, which are correctly renamed):
+
 For example, Perl code prepended to the regex parameter can fail if Windows file names have UTF-8 characters. For example with (note that simple and double quotations are changed from the above linux example):
 	
 	rnm "$c=strftime '%Y%m%d', localtime(stat($f)->mtime); s/(.+)/$c.$1/" "/./"
 
 Nonetheless, if a pure regex without UTF-8 chars is used, all should run ok.
 
+Also note that in order to use most UTF-8 chars directly in the regex or filter parameters, the stdin with a `|` must be used.
+Note also that in Windows the use of stdin for input parameters to rnm command requires the use of `-[yYnN]` modifiers, because unfortunately input cannot be redirected to the keyboard.
+For example, in Windows to substitute "の" japanese hiragana char with "の - " in all files and directories under 'temp2\\':
+(Note though that -[yY] is needed in order to actually take actions):
+
+	C:\\temp> echo  -dr  "s/(の)/\\1 - /"  "/./"  "temp2" |  rnm
+
 ## author
 Written by [circulosmeos](mailto:loopidle@gmail.com)
 
 ## version
-2018-07
+2018-07.13
 
 ## license
 [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)
