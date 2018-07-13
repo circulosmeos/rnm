@@ -150,7 +150,7 @@ Note also that in Windows the use of stdin for input parameters to rnm command r
 For example, in Windows to substitute "の" japanese hiragana char with "の - " in all files and directories under 'temp2\\':
 (Note though that -[yY] is needed in order to actually take actions):
 
-	C:\\temp> echo  -dr  "s/(の)/\\1 - /"  "/./"  "temp2" |  rnm
+	C:\temp> echo  -dr  "s/(の)/\1 - /"  "/./"  "temp2" |  rnm
 
 ## author
 Written by [circulosmeos](mailto:loopidle@gmail.com)
