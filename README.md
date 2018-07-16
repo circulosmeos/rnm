@@ -27,10 +27,10 @@ whilst in Windows double quotation marks are needed: ""
 
 **-l**: Use `ls` command modifiers as FILTER parameter, instead of a regex.
     Limitations of -l:
-* USE WITH CAUTION as this JUST TRIES TO PARSE LS OUTPUT.
+* USE WITH CAUTION as this JUST TRIES TO PARSE `ls` OUTPUT.
   Preferred method should be `rnm` or `rnm -r` in general.
-* -l is not compatible with `rnm -r`
-* In Windows, there must be a cygwin `ls` in the PATH, and UTF-8 
+* `-l` is not compatible with `rnm -r`
+* In Windows, there must be a [Cygwin](https://www.cygwin.com/) `ls` in the PATH, and UTF-8 
 is not supported.
 
 **-n**: when asked for confirmation a "NO" is automatically answered.
@@ -156,7 +156,7 @@ For example, in Windows to substitute "の" japanese hiragana char with "の - "
 Written by [circulosmeos](mailto:loopidle@gmail.com)
 
 ## version
-2018-07.13
+2018-07.16
 
 ## license
 [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)
