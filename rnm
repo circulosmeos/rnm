@@ -119,10 +119,8 @@ INCORRECT_PARAMETERS
 
     $pattern = shift @ARGV;
     if ( $parameters=~/l/ ) {
-        if ( $pattern =~ m#^\Q$PATH_SEPARATOR\E?\.?\Q$PATH_SEPARATOR\E?$# ) {
+        if ( $pattern =~ m#^$# ) {
             $pattern = ''; # accept empty "search pattern" if `rnm -l` => `ls -1ap` w/o any more parameters
-        } else {
-            goto SHOW_MAN_PAGE;
         }
     } else {
         if ( $pattern =~ m#^\Q$PATH_SEPARATOR\E?\.?\Q$PATH_SEPARATOR\E?$# ) {
@@ -506,7 +504,7 @@ sub rename_array {
         sleep (5);
     } elsif ( $ANSWER =~ /n/i ) {
         ; # nothing is asked
-    } else {
+    } elsif ( $counter > 0 ) {
         print 'Do you want to rename this file list? ';
         print '(y/ Y(=>log)/ *):';
 
@@ -520,6 +518,9 @@ sub rename_array {
 
         $ANSWER=getc;
 
+    } else {
+        print "No name adjusted to indicated parameters.\nNothing has been done.\n";
+        return;
     }
 
     if ( $ANSWER !~ /y/i ) {
