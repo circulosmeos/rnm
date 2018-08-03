@@ -10,7 +10,7 @@ All the renaming actions can be exported to a text file.
 
 ## Use:
 
-	rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' 'FILTER' [PATH]
+	rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 
 where FILTER is one of: {`/FILTER_REGEX/` | `LIST_PATTERN`}
 depending on if `-r` or nothing is used (so FILTER_REGEX is needed)
@@ -23,12 +23,12 @@ whilst in Windows double quotation marks are needed: ""
 
 **-d**: treat directory names when parsing and renaming.
     If it is not indicated, directory names are ignored.
-    Versions previous to 2018-07.13 treat always directories.
 
 **-l**: Use `ls` command modifiers as FILTER parameter, instead of a regex.
     Limitations of -l:
 * USE WITH CAUTION as this JUST TRIES TO PARSE `ls` OUTPUT.
   Preferred method should be `rnm` or `rnm -r` in general.
+* DO NOT indicate the path inside FILTER, but as last parameter.
 * `-l` is not compatible with `rnm -r`
 * In Windows, there must be a [Cygwin](https://www.cygwin.com/) `ls` in the PATH, and UTF-8 
 is not supported.
@@ -47,12 +47,12 @@ which must be confirmed with 'y' (yes).
 If capital 'Y' is entered, the results are written to a log file.
 
 Parameters can also be indicated using stdin.
-In this case PATH is compulsory.
+
 The stdin input for parameters is needed in Windows in order to
 use UTF-8 characters on regex, FILTER and/or PATH. Note that a cmd
 console with UTF-8 support must be used. `CMD [/U]` isn't appropriate
-in general, even with UTF-8 fonts. In Windows, if stdin is used,
-`-[yY]` would be needed because input cannot be read from the keyboard.
+in general, even with UTF-8 fonts (see below). In Windows, if stdin is used,
+`-[yY]` would be needed to apply changes, because input cannot be read from the keyboard.
 
 ## Example of output
 
@@ -147,7 +147,7 @@ Nonetheless, if a pure regex without UTF-8 chars is used, all should run ok.
 
 Also note that in order to use most UTF-8 chars directly in the regex or filter parameters, the stdin with a `|` must be used.
 Note also that in Windows the use of stdin for input parameters to rnm command requires the use of `-[yYnN]` modifiers, because unfortunately input cannot be redirected to the keyboard.
-For example, in Windows to substitute "の" japanese hiragana char with "の - " in all files and directories under 'temp2\\':
+In Windows, to substitute for example the japanese hiragana UTF-8 char "の" with "の - " in all files and directories under 'temp2\\':
 (Note though that -[yY] is needed in order to actually take actions):
 
 	C:\temp> echo  -dr  "s/(の)/\1 - /"  "/./"  "temp2" |  rnm
@@ -156,7 +156,7 @@ For example, in Windows to substitute "の" japanese hiragana char with "の - "
 Written by [circulosmeos](mailto:loopidle@gmail.com)
 
 ## version
-2018-07.16
+2018-07.26
 
 ## license
 [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)

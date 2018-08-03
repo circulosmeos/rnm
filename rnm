@@ -1,17 +1,25 @@
 #!/usr/bin/env perl
+#
 # Rename files (and folders) using Perl regular expressions (regex),
 # in linux and Windows, recursively (if desired) and with UTF-8 support.
 # Use:
-# rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' 'FILTER' [PATH]
+# rnm [-dhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 # 
 # by circulosmeos 200408, 200508, 200509, 201806-07
-# release under GPL 3 //www.gnu.org/licenses/gpl-3.0.en.html
+# released under GPL 3 //www.gnu.org/licenses/gpl-3.0.en.html
 # 
 use strict;
 use File::Find;
 use POSIX qw(strftime);
 use File::stat; # in order to use a regex as: rnm -l '$c=stat($_)->mtime; s/(.+)/$c/' '-rt'
 use Encode;
+
+my $RNM_VERSION = '
+Written by circulosmeos (//github.com/circulosmeos)
+GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
+version 2018-07.26
+
+';
 
 my $fso; # for Windows Win32::OLE Scripting.FileSystemObject
 
@@ -43,6 +51,7 @@ my $RECURSIVE = 0;
 my $LS_STYLE = 0;
 my $ANSWER ='';
 my $TREAT_DIRECTORIES = 0;
+my $FULL_HELP = 0;
 my ($parameters, $regexp, $pattern, $path_parameter) = ('', '', '', '');
 
 if ( $#ARGV <= 0 && -p STDIN ) {
@@ -57,7 +66,7 @@ if ( $#ARGV <= 0 && -p STDIN ) {
 ERROR:
 renaming regex and/or filter have incorrect format:
 received:        '$stdin_parameters'
-whilst expected: '[-dlnNryY] "... s/.../.../" "FILTER" "PATH"'
+whilst expected: '[-dhlnNryY] "... s/.../.../" ["FILTER" ["PATH"]]'
 Nothing has been done.
 
 INCORRECT_PARAMETERS
@@ -68,7 +77,7 @@ INCORRECT_PARAMETERS
     $stdin_parameters.='  '; # add final spaces to aid in parsing incomplete parameters
     (($parameters, $regexp, $pattern, $path_parameter) =
         $stdin_parameters =~
-            m#^ *(\-[dlnNryY]+ +)?${QUOTES}?(.*?s/.*?/.*?/)${QUOTES}? +(${QUOTES}?.*?${QUOTES}?) +(${QUOTES}?.*?${QUOTES}?)$#) ||
+            m#^ *(\-[dhlnNryY]+ +)?${QUOTES}?(.*?s/.*?/.*?/)${QUOTES}? +(${QUOTES}?.*?${QUOTES}?) +(${QUOTES}?.*?${QUOTES}?)$#) ||
                 do {
                     $stdin_parameters = substr( $stdin_parameters, 0, -2 ); # i push \s in, i pop it again
                     print_message( $stdin_parameters_error->() );
@@ -108,11 +117,15 @@ INCORRECT_PARAMETERS
     ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
 
     if ( $regexp =~ /^\-\w+$/ ) {
-        if ( $regexp =~ /^\-[dlnNryY]+$/ ) {
+        if ( $regexp =~ /^\-[dhlnNryY]+$/ ) {
             $parameters = $regexp;
+            if ( $parameters =~ /h/ ) {
+                $FULL_HELP = 1;
+                goto SHOW_MAN_PAGE;
+            }
             ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
         } else {
-            print "Parameters contain unrecognized options: '$regexp'\nwhilst expected: '-[dlnNryY]'\n";
+            print "Parameters contain unrecognized options: '$regexp'\nwhilst expected: '-[dhlnNryY]'\n";
             exit 1;
         }
     }
@@ -149,6 +162,7 @@ if ($path_parameter =~ m#\Q$PATH_SEPARATOR\E$#) {
 }
 
 if ($parameters ne '') {
+        # -h was previously processed and implied immediate end.
         $RECURSIVE = 1 if $parameters =~ /r/;
         $LS_STYLE = 1  if $parameters =~ /l/;
         # negative answers take precedence over affirmative ones, and writes to log over don'ts
@@ -192,7 +206,11 @@ print "Using:\n";
 # Use print_message() whenever UTF-8 maybe involved
 print_message( "\tpath:        \t\t\'$path_parameter\'\n" );
 if ($LS_STYLE) {
-    print_message( "\tlist:\t\t\tls -1 $pattern $path_parameter\n" ); # ( 'tls -1' is funny ):-b
+    if ( $pattern =~ m#^(\-[^ ]+)(?: +(.+))?$# ) {
+        print_message( "\tlist:\t\t\tls -1 $1 $path_parameter/$2\n" );
+    } else {
+        print_message( "\tlist:\t\t\tls -1 $path_parameter/$pattern\n" );
+    }
 } else {
     print_message( "\tsearch pattern:\t\t$pattern\n" );
 }
@@ -210,17 +228,17 @@ if ( ( !$OS_WINDOWS && ! -d $path_parameter ) ||
 }
 
 if ($LS_STYLE) {
-    
-    my @ls_file_list;
-    if ( $pattern =~ m#^(\-.+) \*$# ) {
-        @ls_file_list=`ls -1a -p $1 ${path_parameter}/*`;
-    } else {
-        @ls_file_list=`ls -1a -p $pattern $path_parameter`;
-    }
 
     my $ls_recursive = 0;
     my $path = '';
     my $previous_line = '';
+    my @ls_file_list;
+
+    if ( $pattern =~ m#^(\-[^ ]+)(?: +(.+))?$# ) {
+        @ls_file_list=`ls -1a -p $1 ${path_parameter}/$2`;
+    } else {
+        @ls_file_list=`ls -1a -p ${path_parameter}/$pattern`;
+    }
 
     if ( $pattern =~ /\-[^ ]*R/ ) {
         # with `ls -R`, `ls` prepends the path to directories
@@ -235,13 +253,15 @@ if ($LS_STYLE) {
     # @ls_file_list may list a directory,
     # but it is not indicated in the list,
     # so let's guess it:
-    # (only $ls_recursive==1 affected (using *), because with -R
+    # (only $ls_recursive==2 affected (using *), because with -R
     # only the case where an empty dir is listed is not treated here...
     # but that can be left aside as a pathological case)
     if ( $#ls_file_list > -1 &&
          $ls_recursive == 2 ) {
-        my @ls_file_list_d = `ls -1a -p -d $pattern $path_parameter`;
-        if ( $#ls_file_list_d == 0 ) {
+        $pattern =~ m#^(\-[^ ]+)(?: +(.+))?$#;
+        my @ls_file_list_d = `ls -1a -p -d ${path_parameter}/$2`;
+        if ( $#ls_file_list_d == 0 &&
+             -d $ls_file_list_d[0] ) {
             # There's a directory with elements inside it
             chomp $ls_file_list_d[0];
             $path = substr( $ls_file_list_d[0],0,-1 ); # remove trailing '/'
@@ -282,7 +302,10 @@ if ($LS_STYLE) {
                         ; # ???
                     }
                 }
+            } else {
+                $path = $path_parameter;
             }
+
             if ( $treat_dir ) {
                 if ( $path ne '.' ) {
                     # put directories at the end
@@ -316,10 +339,10 @@ if ($LS_STYLE) {
                     }
                     # put directories at the end
                     push @FILE_LIST_2, $file;
-                    push (@PATH_LIST_2, $path) if $ls_recursive;
+                    push (@PATH_LIST_2, $path) if $path_parameter ne '.';
                 } else {
                     push @FILE_LIST, $file;
-                    push (@PATH_LIST, $path) if $ls_recursive;
+                    push (@PATH_LIST, $path) if $path_parameter ne '.';
                 }
             }
 
@@ -417,7 +440,11 @@ if ($TREAT_DIRECTORIES) {
 }
 
 
-&rename_array( $regexp, \@FILE_LIST, \@PATH_LIST, ($TREAT_DIRECTORIES? (($#FILE_LIST_2!=-1)?($#FILE_LIST_2+1):0) : 0) );
+&rename_array( $regexp, \@FILE_LIST, \@PATH_LIST,
+        ( $TREAT_DIRECTORIES?
+            ( ( $#FILE_LIST_2!=-1 )? ( $#FILE_LIST_2+1 ) :0 )
+        : 0 )
+    );
 
 
 exit(0);
@@ -661,7 +688,7 @@ sub process_file_list {
 SHOW_MAN_PAGE:
 
 
-die <<MAN_PAGE_END;
+print <<MAN_PAGE_SHORT1;
 
 Rename files (and folders) using Perl regular expressions (regex),
 in linux and Windows, recursively (if desired) and with UTF-8 support.
@@ -671,7 +698,8 @@ so that you can check that everything will be correctly renamed.
 All the renaming actions can be exported to a text file.
 
 Use:
-rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' 'FILTER' [PATH]
+
+  rnm [-dhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 
 where FILTER is one of: {'/FILTER_REGEX/' | 'LIST_PATTERN'}
 depending on if "-r" or nothing is used (so FILTER_REGEX is needed)
@@ -682,65 +710,87 @@ If PATH is not indicated, "." is used.
 Please note that in linux simple quotation marks are preferred: '' 
 whilst in Windows double quotation marks are needed: ""
 
--d: treat directory names when parsing and renaming.
+  -d: treat directory names when parsing and renaming.
     If it is not indicated, directory names are ignored.
-    Versions previous to 2018-07.13 treat always directories.
 
--l: Use `ls` command modifiers as FILTER parameter, instead of a regex.
+  -h: show full help with examples.
+
+  -l: Use `ls` command modifiers as FILTER parameter, instead of a regex.
+MAN_PAGE_SHORT1
+
+if ( $FULL_HELP == 1 ) {
+
+    print <<MAN_PAGE_FULL_LS;
     Limitations of -l:
     * USE WITH CAUTION as this JUST TRIES TO PARSE `ls` OUTPUT.
       Preferred method should be `rnm` or `rnm -r` in general.
+    * DO NOT indicate the path inside FILTER, but as last parameter.
     * -l is not compatible with `rnm -r`
     * In Windows, there must be a cygwin `ls` in the PATH, and UTF-8 
     is not supported.
+MAN_PAGE_FULL_LS
 
--n: when asked for confirmation a "NO" is automatically answered.
--N: as "-n", but output is also written to a log file in current path.
+}
 
--r: recursively filter all files and folders.
+print <<MAN_PAGE_SHORT2;
+
+  -n: when asked for confirmation a "NO" is automatically answered.
+  -N: as "-n", but output is also written to a log file in current path.
+
+  -r: recursively filter all files and folders.
     If "-r" is not used, only files under current path are processed.
 
--y: when asked for confirmation a "YES" is automatically answered.
--Y: as "-y", but output is also written to a log file in current path.
+  -y: when asked for confirmation a "YES" is automatically answered.
+  -Y: as "-y", but output is also written to a log file in current path.
+MAN_PAGE_SHORT2
+
+if ( $FULL_HELP == 1 ) {
+
+    print <<MAN_PAGE_FULL;
 
 The command shows a list of changes to be made, 
 which must be confirmed with 'y' (yes).
 If capital 'Y' is entered, the results are written to a log file.
 
 Parameters can also be indicated using stdin.
-In this case PATH is compulsory.
+
+Note for WINDOWS users:
 The stdin input for parameters is needed in Windows in order to
 use UTF-8 characters on regex, FILTER and/or PATH. Note that a cmd
 console with UTF-8 support must be used. `CMD [/U]` isn't appropriate
 in general, even with UTF-8 fonts. In Windows, if stdin is used,
 -[yY] would be needed because input cannot be read from the keyboard.
 
+
 Examples:
 
-\$ rnm 's/(\d{2}\.jpg)/\\1/' '/^b.*\\d{2}\.jpg\$/'
+  \$ rnm 's/(\d{2}\.jpg)/\\1/' '/^b.*\\d{2}\.jpg\$/'
+
     This renames all jpg images in the current directory which
     name starts with letter 'b' and end with two numbers, for
     just the two numbers and the extension.
 
 There's an internal variable \$c='0000' available, which can be used
-in the SUBSTITUTION_PATTERN.
-For example:
-\$ rnm -l '\$c++; s/^/\$c./' '-rt'
+in the SUBSTITUTION_PATTERN. For example:
+
+  \$ rnm -l '\$c++; s/^/\$c./' '-rt'
+
     This renames all files (and folders) in current directory,
     ordered by modification time, prepending a consecutive number 
     starting with '0001'.
 
-\$ rnm -l '\$c=stat(\$_)->mtime; s/^/\$c./' '*.log'
+  \$ rnm -l '\$c=stat(\$_)->mtime; s/^/\$c./' '*.log'
+
     This renames all filenames with extension ".log" in the current 
     directory, prepending to each one its modification unix timestamp. 
 
-In Windows, to substitute "の" japanese hiragana char with "の - ":
-(Note though that -[yY] is needed in order to actually take actions)
+In Windows, to substitute for example the japanese hiragana UTF-8 "の"
+char with "の - " stdin use is compulsory, as previously indicated.
+(Note that -y is needed in order to actually take actions):
 
-C:\\temp> echo  "s/(の)/\\1 - /"  "/./"  |  rnm
+  C:\\temp> echo  -y "s/(の)/\\1 - /"  |  rnm
+MAN_PAGE_FULL
 
-Written by circulosmeos (//github.com/circulosmeos) 
-GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
-2018-07.16
+}
 
-MAN_PAGE_END
+die $RNM_VERSION;
