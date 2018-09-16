@@ -3,9 +3,9 @@
 # Rename files (and folders) using Perl regular expressions (regex),
 # in linux and Windows, recursively (if desired) and with UTF-8 support.
 # Use:
-# rnm [-dhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
+# rnm [-adhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 # 
-# by circulosmeos 200408, 200508, 200509, 201806-07
+# by circulosmeos 200408, 200508, 200509, 201806-07, 201809
 # released under GPL 3 //www.gnu.org/licenses/gpl-3.0.en.html
 # 
 use strict;
@@ -17,7 +17,7 @@ use Encode;
 my $RNM_VERSION = '
 Written by circulosmeos (//github.com/circulosmeos)
 GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
-version 2018-07.26
+version 2018-09.15
 
 ';
 
@@ -52,6 +52,7 @@ my $LS_STYLE = 0;
 my $ANSWER ='';
 my $TREAT_DIRECTORIES = 0;
 my $FULL_HELP = 0;
+my $RENAME_WITH_NUMBERS = 0;
 my ($parameters, $regexp, $pattern, $path_parameter) = ('', '', '', '');
 
 if ( $#ARGV <= 0 && -p STDIN ) {
@@ -66,7 +67,7 @@ if ( $#ARGV <= 0 && -p STDIN ) {
 ERROR:
 renaming regex and/or filter have incorrect format:
 received:        '$stdin_parameters'
-whilst expected: '[-dhlnNryY] "... s/.../.../" ["FILTER" ["PATH"]]'
+whilst expected: '[-adhlnNryY] "... s/.../.../" ["FILTER" ["PATH"]]'
 Nothing has been done.
 
 INCORRECT_PARAMETERS
@@ -77,7 +78,7 @@ INCORRECT_PARAMETERS
     $stdin_parameters.='  '; # add final spaces to aid in parsing incomplete parameters
     (($parameters, $regexp, $pattern, $path_parameter) =
         $stdin_parameters =~
-            m#^ *(\-[dhlnNryY]+ +)?${QUOTES}?(.*?s/.*?/.*?/)${QUOTES}? +(${QUOTES}?.*?${QUOTES}?) +(${QUOTES}?.*?${QUOTES}?)$#) ||
+            m#^ *(\-[adhlnNryY]+ +)?${QUOTES}?(.*?s/.*?/.*?/)${QUOTES}? +(${QUOTES}?.*?${QUOTES}?) +(${QUOTES}?.*?${QUOTES}?)$#) ||
                 do {
                     $stdin_parameters = substr( $stdin_parameters, 0, -2 ); # i push \s in, i pop it again
                     print_message( $stdin_parameters_error->() );
@@ -117,7 +118,7 @@ INCORRECT_PARAMETERS
     ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
 
     if ( $regexp =~ /^\-\w+$/ ) {
-        if ( $regexp =~ /^\-[dhlnNryY]+$/ ) {
+        if ( $regexp =~ /^\-[adhlnNryY]+$/ ) {
             $parameters = $regexp;
             if ( $parameters =~ /h/ ) {
                 $FULL_HELP = 1;
@@ -125,7 +126,7 @@ INCORRECT_PARAMETERS
             }
             ($regexp = shift @ARGV) || goto SHOW_MAN_PAGE;
         } else {
-            print "Parameters contain unrecognized options: '$regexp'\nwhilst expected: '-[dhlnNryY]'\n";
+            print "Parameters contain unrecognized options: '$regexp'\nwhilst expected: '-[adhlnNryY]'\n";
             exit 1;
         }
     }
@@ -163,6 +164,7 @@ if ($path_parameter =~ m#\Q$PATH_SEPARATOR\E$#) {
 
 if ($parameters ne '') {
         # -h was previously processed and implied immediate end.
+        $RENAME_WITH_NUMBERS = 1 if $parameters =~ /a/;
         $RECURSIVE = 1 if $parameters =~ /r/;
         $LS_STYLE = 1  if $parameters =~ /l/;
         # negative answers take precedence over affirmative ones, and writes to log over don'ts
@@ -215,8 +217,9 @@ if ($LS_STYLE) {
     print_message( "\tsearch pattern:\t\t$pattern\n" );
 }
 print_message( "\tsubstitution regex:\t$regexp\n" );
-print "\trecursive:   \t\t" . (($RECURSIVE)?'YES':'no') . "\n" if (!$LS_STYLE);
+print "\trecursive:   \t\t" . (($RECURSIVE)?'YES':'no') . "\n" if ( !$LS_STYLE );
 print "\ttreat directories:\t" . (($TREAT_DIRECTORIES)?'YES':'no') . "\n";
+print "\tWill rename appending numbers if filename already exists.\n" if $RENAME_WITH_NUMBERS;
 print "\tWARNING!:\t\tWILL NOT ASK FOR CONFIRMATION!\t" if $ANSWER=~/y/i;
 print "\n";
 
@@ -303,7 +306,7 @@ if ($LS_STYLE) {
                     }
                 }
             } else {
-                $path = $path_parameter;
+                $path = $path_parameter if $path eq '';
             }
 
             if ( $treat_dir ) {
@@ -339,10 +342,10 @@ if ($LS_STYLE) {
                     }
                     # put directories at the end
                     push @FILE_LIST_2, $file;
-                    push (@PATH_LIST_2, $path) if $path_parameter ne '.';
+                    push (@PATH_LIST_2, $path) if $ls_recursive;
                 } else {
                     push @FILE_LIST, $file;
-                    push (@PATH_LIST, $path) if $path_parameter ne '.';
+                    push (@PATH_LIST, $path) if $ls_recursive;
                 }
             }
 
@@ -473,7 +476,7 @@ sub filter_list {
 
     my $fpath=$File::Find::dir;
     # File::Find::name is the complete file path = { path + filename }
-    my ($fname) = ($File::Find::name =~ m#^${File::Find::dir}/(.+)$#);
+    my ($fname) = ($File::Find::name =~ m#^\Q${File::Find::dir}\E/(.+)$#);
     if ( -d $File::Find::name && !$RECURSIVE && $fname ne '' && $fname ne '.' && $fname ne '..') {
         $File::Find::prune = 1; # do not recurse
     }
@@ -639,27 +642,70 @@ sub process_file_list {
             $old_name=$PATH_LIST[$i]. $PATH_SEPARATOR .$old_name;
         }
 
-        print_message( $old_name." \t-> \t".$_."\n",
+        my $renamed_name = $_;
+        my $new_renamed_name = $renamed_name;
+
+        print_message( $old_name." \t-> \t",
             ($ANSWER eq 'Y' || $ANSWER eq 'N')? $fLog: '' );
 
         if ( $ACTION ) {
 
-            if ( (-e $_ && lc($old_name) eq lc($_)) || !-e $_ ) { # only if the renamed filename doesn't exist (case sensitive)
+            # if the destination file already exists (case sensitive comparison!),
+            # append guaranteed-unique digit if $RENAME_WITH_NUMBERS == 1
+            # otherwise, raise error and do not rename
+            my $file_exists;
+            my $new_counter = '0000';
+            if (
+                # in Windows, filenames are case insensitive so if the destination file exists,
+                # it is because it is just de original filename, not another file.
+                !( $OS_WINDOWS && lc($renamed_name) eq lc ($old_name) ) ||
+                # but if this is *nix and the code arrives here, then destination existence is compulsory
+                 (!$OS_WINDOWS)
+                ) {
+                while ( 1 ) {
+                    $file_exists = 0;
+                    $new_counter++;
+                    if ( $OS_WINDOWS ) {
+                        # https://docs.microsoft.com/en-us/previous-versions/tn-archive/ee198727(v%3dtechnet.10)
+                        $file_exists = 1 if ( $fso->FileExists( $new_renamed_name ) );
+                        Win32::OLE->LastError(0); # reset Win32::OLE->LastError() value
+                    } else {
+                        $file_exists = 1 if ( -e $new_renamed_name );
+                    }
+                    if ( $file_exists ) {
+                        # preserve file extension
+                        my ($filename, $fileextension) = $renamed_name =~ m#(.+?)(\.[^\.]+)?$#;
+                        $new_renamed_name = "${filename}.$new_counter";
+                        $new_renamed_name .= "$fileextension" if (defined $fileextension);
+                    } else {
+                        last;
+                    }
+                }
+            }
+
+            if ( $renamed_name ne $new_renamed_name && !$RENAME_WITH_NUMBERS ) {
+                print_message( '!!! "'.$old_name."\" not renamed: Already exists \"$_\"\n",
+                    ($ANSWER eq 'Y')? $fLog: '' );
+                $errors++;
+
+            } else {
+                $renamed_name = $new_renamed_name;
+
                 $ERROR=0;
                 if ( $OS_WINDOWS ) {
                     if ( $is_windows_folder ) {
                         # https://technet.microsoft.com/en-us/library/ee198701.aspx
-                        $fso->MoveFolder( $old_name, $_ );
+                        $fso->MoveFolder( $old_name, $renamed_name );
                     } else  {
                         # https://technet.microsoft.com/en-us/library/ee198725.aspx
-                        $fso->MoveFile( $old_name, $_ );
+                        $fso->MoveFile( $old_name, $renamed_name );
                     }
                     if ( Win32::OLE->LastError() ) {
                         $ERROR=1;
                         #print Win32::OLE->LastError();
                     }
                 } else {
-                    if ( !rename( $old_name, $_ ) ) {
+                    if ( !rename( $old_name, $renamed_name ) ) {
                         $ERROR=1;
                     }
                 }
@@ -669,14 +715,14 @@ sub process_file_list {
                     $errors++;
                 } else {
                     $counter++;
-                }       
-            } else {
-                print_message( '!!! "'.$old_name."\" not renamed: Already exists \"$_\"\n",
-                    ($ANSWER eq 'Y')? $fLog: '' );
-                $errors++;
+                }
+
             }
 
         }
+
+        print_message( $renamed_name."\n",
+            ($ANSWER eq 'Y' || $ANSWER eq 'N')? $fLog: '' );
 
     }
 
@@ -693,13 +739,13 @@ print <<MAN_PAGE_SHORT1;
 Rename files (and folders) using Perl regular expressions (regex),
 in linux and Windows, recursively (if desired) and with UTF-8 support.
 
-A list of changes to be made is presented previous to any action, 
+A list of changes to be made is printed previous to any action,
 so that you can check that everything will be correctly renamed.
 All the renaming actions can be exported to a text file.
 
 Use:
 
-  rnm [-dhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
+  rnm [-adhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 
 where FILTER is one of: {'/FILTER_REGEX/' | 'LIST_PATTERN'}
 depending on if "-r" or nothing is used (so FILTER_REGEX is needed)
@@ -709,6 +755,9 @@ If PATH is not indicated, "." is used.
 
 Please note that in linux simple quotation marks are preferred: '' 
 whilst in Windows double quotation marks are needed: ""
+
+  -a: append unique numbers in case destination filename already exists.
+    Without `-a` an error would be raised and renaming wouldn't occur.
 
   -d: treat directory names when parsing and renaming.
     If it is not indicated, directory names are ignored.

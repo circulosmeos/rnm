@@ -10,7 +10,7 @@ All the renaming actions can be exported to a text file.
 
 ## Use:
 
-	rnm [-dlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
+	rnm [-adlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 
 where FILTER is one of: {`/FILTER_REGEX/` | `LIST_PATTERN`}
 depending on if `-r` or nothing is used (so FILTER_REGEX is needed)
@@ -20,6 +20,9 @@ If PATH is not indicated, `.` is used.
 
 Please note that in linux simple quotation marks are preferred: ''
 whilst in Windows double quotation marks are needed: ""
+
+**-a**: append unique numbers in case destination filename already exists.
+    Without `-a` an error would be raised and renaming wouldn't occur.
 
 **-d**: treat directory names when parsing and renaming.
     If it is not indicated, directory names are ignored.
@@ -129,7 +132,7 @@ In order to use the script in Windows you need:
 * a Perl installation (for example [ActivePerl](https://www.activestate.com/activeperl) or [Strawberry Perl](http://strawberryperl.com/)). The script has been tested with ActivePerl.
 * copy the `rnm` script and `rnm.bat` to a folder in your execution PATH
 
-The `rmm.bat` batch script is provided as an example: it supposes that `perl.exe` is in the PATH, and `rnm` must be preceded by its complete path.
+The `rnm.bat` batch script is provided as an example: it supposes that `perl.exe` is in the PATH, and `rnm` must be preceded by its complete path.
 
 In order to use `rnm -l` you need a [Cygwin](https://www.cygwin.com/) installation in your PATH, which provides the `ls` command.
 
@@ -156,8 +159,10 @@ In Windows, to substitute for example the japanese hiragana UTF-8 char "の" wit
 Written by [circulosmeos](mailto:loopidle@gmail.com)
 
 ## version
-2018-07.26
+2018-09.15
 
 ## license
 [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)
 
+## disclaimer
+This code is provided "as is", without warranty of any kind, express or implied.
