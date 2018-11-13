@@ -155,6 +155,8 @@ In Windows, to substitute for example the japanese hiragana UTF-8 char "の" wit
 
 	C:\temp> echo  -dr  "s/(の)/\1 - /"  "/./"  "temp2" |  rnm
 
+*2018-Nov amendment*: In Windows `perl.exe` binary can be manually **patched and recompiled** in order to accept Unicode chars in command line: Please take a look at [Perl-with-Unicode-for-Windows](https://github.com/circulosmeos/Perl-with-Unicode-for-Windows).
+
 ## ListContent() subroutine
 
 Subroutine *`ListContent()`* can be extracted from code and used indepently in other Windows or linux Perl projects. 
