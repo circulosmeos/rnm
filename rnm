@@ -5,7 +5,7 @@
 # Use:
 # rnm [-adFhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 # 
-# by circulosmeos 200408, 200508, 200509, 201806-07, 201809
+# by circulosmeos 200408, 200508, 200509, 201806-07, 201809, 201909
 # released under GPL 3 //www.gnu.org/licenses/gpl-3.0.en.html
 # 
 use strict;
@@ -15,11 +15,12 @@ use File::Find;
 use POSIX qw(strftime);
 use File::stat; # in order to use a regex as: rnm -l '$c=stat($_)->mtime; s/(.+)/$c/' '-rt'
 use Encode;
+use IO::Handle; # compatibility with Perl<5.14
 
 my $RNM_VERSION = '
 Written by circulosmeos (//github.com/circulosmeos)
 GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
-version 2018-11.04
+version 2019-09.11
 
 ';
 

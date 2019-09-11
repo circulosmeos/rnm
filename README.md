@@ -179,7 +179,7 @@ Return parameter is a reference to an array containing:
 Written by [circulosmeos](mailto:loopidle@gmail.com)
 
 ## version
-2018-11.04
+2019-09.11
 
 ## license
 [GPL v3](https://www.gnu.org/licenses/gpl-3.0.en.html)
