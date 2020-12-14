@@ -5,7 +5,7 @@
 # Use:
 # rnm [-adFhlnNryY] 's/PATTERN/SUBSTITUTION/' [ 'FILTER' [PATH] ]
 # 
-# by circulosmeos 200408, 200508, 200509, 201806-07, 201809, 201909
+# by circulosmeos 200408, 200508, 200509, 201806-07, 201809, 201909, 202012
 # released under GPL 3 //www.gnu.org/licenses/gpl-3.0.en.html
 # 
 use strict;
@@ -20,7 +20,7 @@ use IO::Handle; # compatibility with Perl<5.14
 my $RNM_VERSION = '
 Written by circulosmeos (//github.com/circulosmeos)
 GPL v3 (//www.gnu.org/licenses/gpl-3.0.en.html)
-version 2019-09.11
+version 2020-12.14
 
 ';
 
@@ -60,7 +60,7 @@ my $ANSWER ='';
 my $TREAT_DIRECTORIES = 0;
 my $FULL_HELP = 0;
 my $RENAME_WITH_NUMBERS = 0;
-my ($parameters, $regexp, $pattern, $path_parameter) = ('', '', '', '');
+my ($parameters, $parameters_to_log, $regexp, $pattern, $path_parameter) = ('', '', '', '', '');
 
 if ( $#ARGV <= 0 && -p STDIN ) {
     # Read parameters from STDIN.
@@ -82,6 +82,7 @@ INCORRECT_PARAMETERS
 
     $stdin_parameters = <STDIN>;
     chomp $stdin_parameters;
+    $parameters_to_log = $stdin_parameters;
     $stdin_parameters.='  '; # add final spaces to aid in parsing incomplete parameters
     (($parameters, $regexp, $pattern, $path_parameter) =
         $stdin_parameters =~
@@ -151,6 +152,8 @@ INCORRECT_PARAMETERS
     }
 
     ($path_parameter = shift @ARGV);
+
+    $parameters_to_log = "$parameters $regexp $pattern $path_parameter";
 
 }
 
@@ -643,7 +646,9 @@ sub process_array {
             $ANSWER = 'y';
         } else {
             open $fLog, '>:encoding(UTF-8)', $LOG_FILE or die "\nLog file '$LOG_FILE' could not be created.\n";
-            print $fLog "Renaming files:\ndate: ".(scalar localtime)."\n\n";
+            print $fLog  "Action: renaming files\n";
+            print $fLog  "Cmdline parameters: $parameters_to_log\n";
+            print $fLog  'Date: '.(scalar localtime)."\n\n";
         }
     }
     print "\nACTIONS:\n" if $ANSWER=~/y/i;
